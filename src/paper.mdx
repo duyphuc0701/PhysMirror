@@ -1,12 +1,47 @@
 ---
-title: Mirror Object Generation
+title: "PhysMirror: Physics-Aware Mirror Object Generation"
 authors:
-  - name: Duy-Phuc Nguyen
-    url: mailto:ndphuc22@apcs.fitus.edu.vn
-    institution: Faculty of Information Technology, University of Science-VNUHCM
   - name: Xuan-Bach Mai
-    url: mailto:mxbach22@apcs.fitus.edu.vn
-    institution: Faculty of Information Technology, University of Science-VNUHCM
+    institution: University of Science, VNUHCM
+    notes: ["1", "†"]
+  - name: Duy-Phuc Nguyen
+    institution: University of Science, VNUHCM
+    notes: ["1", "†"]
+  - name: Quoc-Van Le
+    institution: University of Science, VNUHCM
+    notes: ["1"]
+  - name: Tam V. Nguyen
+    url: mailto:tamnguyen@udayton.edu
+    institution: University of Dayton
+    notes: ["2"]
+  - name: Thanh-Toan Do
+    institution: Monash University
+    notes: ["3"]
+  - name: Huu Le
+    institution: VinFast
+    notes: ["4"]
+  - name: Duong-Van Nguyen
+    institution: VinFast
+    notes: ["4"]
+  - name: Minh-Triet Tran
+    institution: University of Science, VNUHCM
+    notes: ["1"]
+  - name: Trung-Nghia Le
+    institution: University of Science, VNUHCM
+    notes: ["1", "‡"]
+notes:
+  - symbol: "†"
+    text: "Equal contribution"
+  - symbol: "‡"
+    text: "Corresponding author"
+  - symbol: "1"
+    text: "University of Science, VNUHCM, Ho Chi Minh City, Vietnam"
+  - symbol: "2"
+    text: "University of Dayton, Dayton, Ohio, US"
+  - symbol: "3"
+    text: "Monash University, Melbourne, Victoria, Australia"
+  - symbol: "4"
+    text: "VinFast, Frankfurt am Main, Hesse, Germany"
 links:
   - name: Paper
     url: https://github.com/T2I-Mirror-Object/MirrorObjectGen
@@ -17,7 +52,7 @@ links:
 
 theme: device
 favicon: favicon.svg
-description: "A physics-aware text-to-image generation pipeline that incorporates 3D geometric priors to enforce mirror reflection consistency."
+description: "PhysMirror: A physics-aware generation framework that enforces projective geometry through explicit 3D spatial priors for synthesizing physically accurate mirror reflections."
 thumbnail: screenshot-light.png
 ---
 
@@ -40,168 +75,194 @@ import fig6 from "./assets/fig6.png";
 
 ## Abstract
 
-Generating physically correct mirror reflections remains a challenging problem for modern text-to-image diffusion models. In this work, we propose a physics-aware text-to-image generation pipeline that explicitly incorporates 3D geometric priors to enforce mirror reflection consistency. Our method automatically constructs a simple 3D scene directly from the input text prompt, procedurally generating a mirror and its physically accurate reflection. From the simulated 3D scene, a depth map is rendered and used as a conditioning signal for diffusion-based image generation. We investigate both training-based and training-free strategies for integrating these depth maps into the FLUX.1-dev backbone, including LoRA training and pretrained OminiControl conditioning. In addition, we introduce a novel geometric evaluation metric that quantitatively measures the physical correctness of mirror reflections based on the consistency of object and reflection correspondences. Experimental results demonstrate that our approach improves reflection realism and geometric correctness compared to the baseline model, while maintaining strong text-image alignment.
+Synthesizing physically accurate mirror reflections remains a fundamental challenge for modern text-to-image diffusion models, which are increasingly critical for generating synthetic training data for embodied AI and robotic perception. These models typically struggle with strict geometric constraints, leading to hallucinations that degrade the utility of the synthetic data. To address this, we introduce a novel, end-to-end physics-aware generation framework namely <SmallCaps>PhysMirror</SmallCaps> that natively enforces projective geometry through explicit 3D spatial priors. Our method automatically lifts prompted objects into 3D meshes and constructs a lightweight, mathematically exact mirror scene within a simulated environment. By rendering this explicit 3D scene, we extract precise 2D conditioning elements, such as depth maps and segmentation maps, that serve as robust guiding signals for downstream diffusion models, guiding them to generate images with physically correct mirror reflections. Moreover, we introduce Mirror Consistency Score (MCS), a reference-free, fully automated metric that quantifies physical correctness using dense feature matching and vanishing point convergence. Experimental results on our newly constructed MirrOB dataset demonstrate that our approach outperforms state-of-the-art baselines in reflection accuracy and physical realism, while maintaining strong text-to-image semantic alignment, providing a reliable pipeline for embodied AI data generation.
 
 </HighlightedSection>
 
 ## Introduction
 
-Modern text-to-image (T2I) diffusion models, including multiple variants within the FLUX.1 family [@flux2024] as well as Stable Diffusion family [@podell2023sdxl; @esser2024scaling], have demonstrated remarkable capabilities in generating photorealistic and semantically complex images. However, these models still face significant challenges when tasked with scenarios requiring strict adherence to physical laws and geometric consistency.
-
-A particularly difficult case is generating images with physically correct mirror reflections. When prompted with "a chair/cat in front of the mirror, both the object and its mirror reflection are visible", standard diffusion models frequently fail to produce a physically correct reflection.
+Visual perception in complex, real-world environments poses significant challenges for autonomous agents and robotic systems. Mirrors, in particular, frequently cause severe failures in robot depth estimation, spatial mapping, and manipulation tasks due to illusory depth and reflection mismatches. While synthetic datasets generated by modern text-to-image (T2I) diffusion models, such as FLUX.1 [@flux2024] and Stable Diffusion families [@podell2023sdxl; @esser2024scaling], offer an exciting way to train embodied AI, these models often struggle to obey physical laws and geometric consistency. A critical failure case is the synthesis of physically correct mirror reflections.
 
 <Figure>
-  <Picture slot="figure" src={fig1} alt="Failure cases of FLUX.1-dev Text-to-Image model when generating images containing objects and their mirror reflections. Left: a chair in front of the mirror. Right: a cat in front of the mirror." />
-  <Fragment slot="caption">Failure cases of FLUX.1-dev Text-to-Image model when generating images containing objects and their mirror reflections.</Fragment>
+  <Picture slot="figure" src={fig1} alt="Typical failure cases of the FLUX.1-dev text-to-image model when generating mirror scenes: (a) missing reflection, (b) missing mirror, (c) mismatched object pose." />
+  <Fragment slot="caption">Typical failure cases of the FLUX.1-dev text-to-image model when generating mirror scenes. Common errors include (a) missing the reflection entirely, (b) missing the mirror itself, and (c) generating a mismatched object pose between the real object and its reflection.</Fragment>
 </Figure>
 
-The core limitation comes from the fact that 2D diffusion models learn statistical correlations between pixels rather than explicit physical representations. While they can mimic the appearance of a reflection, they do not inherently understand that a reflection and the real object are symmetric across the mirror plane.
+Recent approaches [@dhiman2025reflecting; @dhiman2025mirrorverse] attempt to address this by reframing reflection generation as an inpainting task. However, these methods treat reflections as a 2D completion problem rather than a strict geometric projection, failing to explicitly enforce the underlying mathematical symmetry properties.
 
-To address this, we propose a physics-aware framework that incorporates explicit 3D priors into the generation pipeline. Our core insight is to construct a simulated 3D scene directly from the text prompt, ensuring that the object and its reflection are optically symmetric across the mirror plane.
+In this work, we introduce <SmallCaps>PhysMirror</SmallCaps>, a novel end-to-end physics-aware generation pipeline designed to create photorealistic images with accurate mirror reflections. By utilizing a text-to-3D generative model, we generate the underlying object mesh directly from the input prompt. We then simulate the geometric relationship between the object and a virtual mirror plane within a 3D rendering framework [@ravi2020pytorch3d]. Through this process, we can automatically render spatial constraints, such as depth and segmentation maps, from optimized viewpoints. These 2D spatial maps can be integrated into diffusion architectures through zero-shot conditioning frameworks [@tan2025ominicontrol; @li2025seg2any] or custom adapters, successfully bridging the gap between semantic creativity and physical laws.
 
-Our method operates in three distinct stages:
+Furthermore, we introduce Mirror Consistency Score (MCS), a fully automated metric that evaluates the physical correctness of generated reflections based on vanishing point convergence, without requiring ground-truth annotations or human intervention.
 
-1. We perform semantic parsing of the prompt to identify the primary object and utilize Shap-E [@jun2023shap], a latent text-to-3D diffusion model, to "lift" the concept into a 3D mesh.
-2. We explicitly construct a 3D scene using PyTorch3D [@ravi2020pytorch3d] and Trimesh. We simulate the reflection by duplicating the object mesh and applying a geometric flip across the mirror plane.
-3. We bridge the gap between 3D geometry and photorealistic 2D generation by rendering a depth map from the constructed 3D scene and using it as a conditioning signal for FLUX.1-dev.
+Our contributions are as follows:
 
-## Method
+- We present an end-to-end, fully automatic pipeline that constructs a geometrically consistent 3D scene directly from text prompts, utilizing it to extract explicit geometric priors.
+- We propose the Mirror Consistency Score (MCS), a novel, fully automated evaluation metric that quantitatively measures the physical correctness of mirror reflections without requiring ground-truth annotations or human intervention.
+- We construct a new Mirror Object Benchmark (MirrOB) dataset, and conduct extensive experiments, demonstrating that our custom depth-conditioned LoRA and zero-shot conditioning frameworks significantly surpass state-of-the-art text-to-image baseline models.
 
-### Object Extraction and 3D Generation
+## Proposed Method
 
-Given an input prompt for the text-to-image model (for example, "a chair in front of the mirror, both the object and its mirror reflection are visible"), our pipeline first parses the text to identify and extract the description of the primary object(s). The extracted object text serves as the conditioning input for Shap-E [@jun2023shap], which directly generates 3D meshes from text input. The resulting geometry is stored in standard `.obj` format.
-
-### Constructing 3D Scene
-
-Once the 3D meshes of primary objects are obtained from Shap-E, we construct a geometrically consistent mirrored scene with the support of PyTorch3D [@ravi2020pytorch3d]. The goal is to create a lightweight 3D environment containing the real object, a mirror, its physically accurate reflection, and a supporting floor.
+We propose <SmallCaps>PhysMirror</SmallCaps>, a modular pipeline that transitions from a text prompt to a physically grounded 3D scene, then projects back to 2D spatial conditioning maps to guide photorealistic image generation. The pipeline consists of four stages: (1) lifting prompted objects into 3D meshes, (2) composing a physically accurate mirror scene, (3) rendering conditioning maps from a carefully chosen viewpoint, and (4) guiding a text-to-image generative model with these spatial priors.
 
 <Wide>
 <Figure>
-  <Picture slot="figure" src={fig2} alt="Pipeline diagram: The input prompt is first parsed to extract individual object descriptions, which are lifted into a 3D mesh using Shap-E model. PyTorch3D and Trimesh are then used to procedurally generate a mirror frame and create a physically accurate reflection mesh." />
-  <Fragment slot="caption">The input prompt is first parsed to extract individual object descriptions (e.g., "A chair"), which are lifted into a 3D mesh using Shap-E model. We then employ PyTorch3D and Trimesh to procedurally generate a mirror frame and create a physically accurate reflection mesh, by duplicating and geometrically flipping the object mesh across the mirror frame.</Fragment>
+  <Picture slot="figure" src={fig2} alt="Overview of the proposed PhysMirror pipeline. Given a text prompt, primary objects are parsed and lifted into 3D meshes via a text-to-3D model (Stage 1). These meshes are assembled into a physically accurate 3D mirror scene (Stage 2). A virtual camera renders precise spatial maps such as depth and segmentation (Stage 3). Finally, conditioning maps guide a text-to-image model to synthesize the final image (Stage 4)." />
+  <Fragment slot="caption">Overview of the proposed <SmallCaps>PhysMirror</SmallCaps>. Given a text prompt, primary objects are parsed and lifted into 3D meshes via a text-to-3D model (Stage 1). These meshes are then assembled into a physically accurate 3D mirror scene (Stage 2). Next, a virtual camera is positioned to render precise spatial maps, such as depth and segmentation (Stage 3). Finally, these conditioning maps guide a text-to-image generative model to synthesize the final photorealistic image with geometrically correct mirror reflections (Stage 4).</Fragment>
 </Figure>
 </Wide>
 
-The mirror reflection is generated by duplicating the object mesh, applying a reflection transformation over the $Z = 0$ plane (by negating all Z-coordinates), and then translating the result by $-2 \times d_{gap}$ along the Z-axis. This ensures the reflected object is positioned at the optically correct location behind the mirror plane, achieving perfect geometric symmetry.
+### 3D Mesh Generation
 
-The camera is positioned using a perspective projection with a fixed field of view (FoV) of 60 degrees and defined using spherical coordinates, starting from the positive Z-axis with a deviation of $20°$–$25°$ in azimuth and an elevation angle of $20°$–$25°$.
+Given an input text prompt, we parse the text to identify primary objects described in the scene. Each extracted object name is then passed to a text-to-3D generative model to lift the semantic concept into an explicit 3D mesh. We employed TRELLIS [@xiang2025trellis] as our primary text-to-3D model due to its strong shape fidelity. The implementation also supports Shap-E [@jun2023shap] as a lightweight alternative.
 
-### Depth Map Extraction
+### Scene Composition
 
-From the constructed 3D scene and the determined camera viewpoint, we derive a depth map that provides strong geometric and semantic priors to the text-to-image synthesis. The depth map is rendered using PyTorch3D's differentiable rasterizer and Matplotlib [@hunter2007matplotlib].
+We construct a complete 3D scene with objects being placed in front of a mirror. The scene consists of the floor plane, a set of room walls, the mirror, the primary objects placed in the physical space in front of the mirror ($Z > 0$).
+
+The mirror reflection is generated by applying a planar reflection transformation. Given the mirror as a plane with unit normal $\mathbf{n}$ at signed distance $d$ from the origin, the reflection $\mathbf{p}'$ of any point $\mathbf{p}$ on a 3D object surface visible to the mirror is given by:
+
+$$
+\mathbf{p}' = \mathbf{p} - 2\left(\mathbf{n} \cdot \mathbf{p} - d\right)\mathbf{n}
+$$
+
+Applying this to every vertex of the object mesh produces a geometrically correct reflected mesh, automatically placed at the optically correct position behind the mirror plane. Because this transformation is applied directly to explicit 3D geometry, the resulting reflection serves as a mathematical ground truth with no generative uncertainty.
+
+### Spatial Conditioning Extraction
+
+With the 3D scene fully assembled, we simulate a virtual camera and use a standard 3D rasterization engine to render the explicit spatial conditioning maps.
+
+**Depth map.** The extracted depth map explicitly encodes the layered distance structure characteristic of a mirror scene: the real object is closest to the camera, the mirror surface lies at an intermediate depth, and the reflected object appears furthest behind the mirror.
+
+**Segmentation map.** Similarly, a per-region segmentation map is rendered, assigning a distinct color to each scene element: the real object, its reflection, mirror frame, floor, and surrounding walls. Each region is paired with a short descriptive text prompt, and the full mapping is exported as a JSON file.
+
+### Conditioning-Guided Generation
+
+We adopt FLUX.1-dev [@flux2024] as the backbone generative model. Our primary pipeline uses zero-shot depth conditioning via the pretrained OminiControl framework [@tan2025ominicontrol], which injects our rendered depth map as a lightweight plug-in adapter into FLUX.1-dev. We also investigated alternative conditioning strategies including segmentation-conditioned generation through the Seg2Any framework [@li2025seg2any] and a custom depth-conditioned LoRA fine-tuned on the SynMirror dataset [@dhiman2025reflecting].
 
 <Wide>
 <Figure>
-  <Picture slot="figure" src={fig3} alt="Depth map rendering pipeline: We render the depth map as a 2D geometric prior from the constructed 3D scene using PyTorch3D. The depth map serves as a guidance element for the text-to-image generation process." />
-  <Fragment slot="caption">We render the depth map as a 2D geometric prior from the constructed 3D scene using PyTorch3D. The depth map serves as a guidance element for the text-to-image generation process, where we evaluate multiple integration strategies including LoRA training and OminiControl framework to produce the final photorealistic image.</Fragment>
+  <Picture slot="figure" src={fig3} alt="Conditioning-guided generation strategies. (a) Depth-conditioning generation via OminiControl. (b) Segmentation-conditioning generation via Seg2Any." />
+  <Fragment slot="caption">Conditioning-guided generation strategies. (a) The depth map rendered from the 3D scene is passed to a depth-conditioned model (OminiControl zero-shot) to generate the final image. (b) The segmentation map, together with per-region text prompts, is passed to Seg2Any for region-level semantic control.</Fragment>
 </Figure>
 </Wide>
 
-The raw depth buffer is linearly normalized to the range $[0, 1]$ and subsequently inverted such that closer surfaces appear brighter (near = white, far = black). The resulting grayscale image explicitly encodes the physical distance relationships critical for mirror reflections.
+## Mirror Consistency Score
 
-### Depth Conditioning Image Generation
-
-We explore two approaches for integrating the derived depth map into text-to-image generation:
-
-**LoRA Training on FLUX.1-dev.** We train the FLUX.1-dev model [@flux2024] using Low-Rank Adaptation (LoRA) [@lora2024] to incorporate depth map conditioning. We create a training dataset from the existing SynMirror dataset [@dhiman2025reflecting], consisting of 3,000 high-quality synthetic images with ground-truth mirror reflections. We use a learning rate of $1 \times 10^{-4}$, batch size of 1, gradient accumulation steps of 4, LoRA rank of 64, and train for 5 epochs on a single NVIDIA A100 GPU.
-
-**Pretrained OminiControl with FLUX.1-dev.** Our second approach employs OminiControl [@tan2025ominicontrol], a minimal and universal control framework designed for Diffusion Transformer (DiT) models. We apply the depth map at a strength of 0.8 to balance fidelity to the 3D priors and creative freedom from the text.
-
-## Novel Evaluation Metric for Physical Correctness
-
-While existing metrics like FID [@jayasumana2024rethinking] and CLIP score [@hessel2022clipscore] are valuable for assessing general image quality and semantic alignment, they do not directly measure whether a generated mirror reflection is physically plausible. We propose a novel geometric metric based on analyzing the geometric consistency between corresponding points on an object and its mirror reflection.
-
-<Figure>
-  <Picture slot="figure" src={fig4} alt="Illustration of correspondence vectors connecting an object to its mirror reflection. Each vector connects a distinct feature point on the object to its corresponding point in the reflection." />
-  <Fragment slot="caption">Illustration of correspondence vectors connecting an object to its mirror reflection. Each vector connects a distinct feature point on the object (e.g., corner, edge) to its corresponding point in the reflection. For a physically correct reflection, these vectors should exhibit a consistent geometric relationship.</Fragment>
-</Figure>
-
-### Metric Computation
-
-**Step 1: Correspondence Vector Annotation.** We identify $n$ pairs of corresponding points between the object and its reflection, where $n \geq 6$. For each pair $i$, we define a correspondence vector $\mathbf{v}_i$ from the object point $P_i = (x_i, y_i)$ to its reflection point $P_i' = (x_i', y_i')$.
-
-**Step 2: Cross Point Calculation.** For each pair of correspondence vectors $\mathbf{v}_i$ and $\mathbf{v}_j$ where $i < j$, we compute their intersection point (cross point) $C_{ij}$:
-
-$$
-C_{ij} = P_i + t_i(P_i' - P_i)
-$$
-
-where $t_i$ is computed from:
-
-$$
-t_i = \frac{(x_i - x_j)(y_j - y_j') - (y_i - y_j)(x_j - x_j')}{(x_i - x_i')(y_j - y_j') - (y_i - y_i')(x_j - x_j')}
-$$
-
-**Step 3: Line Fitting and Quality Assessment.** We fit a line to the set of cross points $\{C_{ij}\}$ using ordinary least squares regression. For a physically correct reflection with a flat mirror, all cross points should lie approximately on a single line.
+To quantitatively evaluate the geometric and physical correctness of mirror reflections without requiring human evaluation, we propose Mirror Consistency Score (MCS), a novel, fully automated evaluation pipeline. Our metric leverages state-of-the-art models to establish dense semantic correspondences between a real object and its reflection, followed by a geometric analysis based on the principles of projective geometry.
 
 <Wide>
 <Figure>
-  <Picture slot="figure" src={fig5} alt="Distribution of cross points for a physically correct reflection (left) versus an incorrect reflection (right). Cross points from correct reflections cluster tightly along a line, while incorrect reflections produce scattered cross points." />
-  <Fragment slot="caption">Distribution of cross points for a physically correct reflection (left, score: 0.804) versus an incorrect reflection generated by FLUX.1-dev (right, score: 0.606). Cross points from correct reflections cluster tightly along a line, while incorrect reflections produce scattered cross points.</Fragment>
+  <Picture slot="figure" src={fig4} alt="Pipeline of the proposed Mirror Consistency Score (MCS). The generated image is first segmented to isolate the primary objects and their reflections. Dense feature matching is then applied to establish corresponding keypoints, which are used to mathematically evaluate projective geometric consistency." />
+  <Fragment slot="caption">Pipeline of the proposed Mirror Consistency Score (MCS). The generated image is first segmented to isolate the primary objects and their reflections. Dense feature matching is then applied to establish corresponding keypoints, which are used to mathematically evaluate projective geometric consistency.</Fragment>
 </Figure>
 </Wide>
 
-We employ two complementary metrics to quantify the quality of the fit:
+### Object and Reflection Segmentation
 
-**Coefficient of Determination ($R^2$):** Measures how well the cross points align to the fitted line:
+The first stage isolates the real object and its corresponding mirror reflection from the background. We employ Grounding DINO [@liu2024grounding] for open-vocabulary detection and SAM [@kirillov2023segment] for zero-shot segmentation. The combined model outputs bounding boxes and precise boolean masks for the detected instances.
 
-$$
-R^2 = 1 - \frac{\sum_{k=1}^{N_c} (c_k^y - \hat{c}_k^y)^2}{\sum_{k=1}^{N_c} (c_k^y - \bar{c}^y)^2}
-$$
+### Dense Feature Extraction and Matching
 
-**Mean Perpendicular Distance ($\bar{d}$):** The average perpendicular distance from each cross point to the fitted line:
+We utilize DINOv2 [@oquab2023dinov2], which is well-known for its robust part-level feature representations. The cropped ROIs are resized and passed through the DINOv2 backbone to extract patch-level tokens, yielding a dense grid of $D$-dimensional feature descriptors. We filter the keypoints using the alpha channel of the segmentation masks and $L_2$-normalize the retained feature vectors.
 
-$$
-d_k = \frac{|mc_k^x - c_k^y + b|}{\sqrt{m^2 + 1}}
-$$
-
-**Normalized Score.** We combine $R^2$ and $\bar{d}$ into a single, interpretable normalized score $S \in [0, 1]$:
+To find corresponding points between the real object and its reflection, we compute the cosine similarity between the sets of $L_2$-normalized descriptors:
 
 $$
-S = 0.6 \cdot R^2 + 0.4 \cdot \exp\left(-\frac{\bar{d}}{\sigma}\right)
+S = F_r F_m^\top
 $$
 
-where $\sigma = 50$ pixels is a scale parameter. Scores $S \geq 0.90$ indicate strong geometric consistency with physically correct reflections, $0.80 \leq S < 0.90$ indicates acceptable quality, and $S < 0.80$ suggests potential geometric inconsistencies.
+We enforce a strict bijective mapping using a Mutual Nearest Neighbor (MNN) constraint and retain the top $K$ most confident pairs for each object in the image.
 
-## Results
+### Geometric Consistency Formulation
+
+The main idea of our Mirror Consistency Score (MCS) is to measure the physical accuracy of the matched points. In 3D space, lines connecting points on a real object to their exact reflections on a flat mirror are strictly parallel. Under perspective projection in a 2D image, these parallel lines must converge at a single vanishing point.
+
+We compute the geometric centroid $\mu$ (the effective vanishing point) as the mean of all valid pairwise intersection points:
+
+$$
+\mu = \frac{1}{|\mathcal{I}|}\sum_{P \in \mathcal{I}} P
+$$
+
+The final score is calculated using an exponential decay function to bound the metric between 0 and 1:
+
+$$
+MCS = \exp\left(-\frac{1}{\lambda|\mathcal{I}|}\sum_{P \in \mathcal{I}} \|P - \mu\|_2\right)
+$$
+
+where $\lambda$ is a normalization scaling factor. MCS approaching 1.0 indicates perfect projective consistency, while lower scores indicate structural warping, incorrect semantic generation, or physical impossibilities in the mirror reflection.
+
+<Wide>
+<Figure>
+  <Picture slot="figure" src={fig5} alt="Visualization of the Mirror Consistency Score (MCS). Left: A physically correct reflection yields tightly clustered intersection points around the vanishing point, resulting in a high MCS (0.9293). Right: Perspective mismatches cause the intersection points to scatter, resulting in a low MCS (0.6948)." />
+  <Fragment slot="caption">Visualization of the Mirror Consistency Score (MCS). (Left) A physically correct reflection yields tightly clustered intersection points around the vanishing point, resulting in a high MCS. (Right) Perspective mismatches cause the intersection points to scatter, which is penalized with a low score.</Fragment>
+</Figure>
+</Wide>
+
+## Proposed Benchmark Suite
+
+### MirrOB Dataset
+
+We construct a new benchmark dataset, namely Mirror Object Benchmark (MirrOB). Based on 80 standard object categories of the MS COCO dataset [@lin2014coco], our benchmark includes three levels of difficulty:
+
+- **Single-Object Prompts:** 160 prompts (2 per category) with simple and complex scene descriptions.
+- **Two-Object Prompts:** 100 unique prompts from randomly sampled pairs of COCO categories.
+- **Three-Object Prompts:** 100 unique prompts from randomly sampled triplets.
+
+In total, our benchmark comprises **360 structured prompts**, allowing us to measure how different generative models handle perspective, object details, and multi-object occlusion in mirror reflections.
+
+## Experiments and Results
+
+### Quantitative Results
+
+We evaluated <SmallCaps>PhysMirror</SmallCaps> on the MirrOB dataset, comparing it against FLUX.1-dev and Stable Diffusion XL (SDXL) baselines. Performance was assessed across geometric correctness (MCS), semantic alignment (CLIP Score), and perceptual image quality (CLIP-IQA, MANIQA, MUSIQ).
+
+| Method | MCS 1 Obj ↑ | MCS 2 Obj ↑ | MCS 3 Obj ↑ | MCS Overall ↑ | CLIP Score ↑ | CLIP-IQA ↑ | MANIQA ↑ | MUSIQ ↑ |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| SDXL | 0.480 | 0.580 | 0.548 | 0.527 | <u>33.284</u> | 0.6499 | 0.5114 | **73.4996** |
+| FLUX.1-dev | 0.476 | 0.689 | 0.670 | 0.589 | **33.361** | 0.6051 | 0.4733 | 70.5174 |
+| **PhysMirror (Ours)** | **0.727** | **0.779** | **0.744** | **0.746** | 28.914 | **0.6589** | <u>0.4929</u> | <u>70.7800</u> |
+
+Our method achieves the highest overall Mirror Consistency Score of **0.746** and demonstrates robustness across all difficulty levels. OminiControl also achieves the highest CLIP-IQA score (0.659), confirming that depth-based conditioning preserves perceptual quality most effectively.
+
+### Ablation Study
+
+We compare our primary zero-shot depth-based approach (OminiControl) against a zero-shot segmentation-conditioned method (Seg2Any) and a custom fine-tuned depth adapter (SynMirror LoRA).
+
+| Method | MCS 1 Obj ↑ | MCS 2 Obj ↑ | MCS 3 Obj ↑ | MCS Overall ↑ | CLIP Score ↑ | CLIP-IQA ↑ | MANIQA ↑ | MUSIQ ↑ |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Ours (Seg2Any) | 0.540 | 0.719 | 0.700 | 0.634 | **31.924** | 0.6115 | **0.4851** | **74.1957** |
+| Ours (SynMirror LoRA) | **0.729** | <u>0.732</u> | 0.637 | 0.704 | 30.307 | 0.5344 | 0.4392 | 69.9332 |
+| Ours (OminiControl) | <u>0.727</u> | **0.779** | **0.744** | **0.746** | 28.914 | **0.6589** | <u>0.4929</u> | <u>70.7800</u> |
+
+The zero-shot OminiControl framework achieves the highest overall MCS (0.746), maintaining object integrity and spatial coherence even in complex three-object settings.
 
 ### Qualitative Results
 
 <Wide>
 <Figure>
-  <Picture slot="figure" src={fig6} alt="Qualitative comparisons between Ours (OminiControl), Ours (LoRA training), and FLUX.1-dev baseline for four objects: an apple, an antique clock, a lit candle, and a laptop computer, all in front of a mirror." />
-  <Fragment slot="caption">**Qualitative comparisons.** We evaluated our two methods "Ours (OminiControl)" and "Ours (LoRA training)" against the FLUX.1-dev baseline model. In general, our methods generate realistic and physically correct reflections, while FLUX.1-dev struggles in some examples (missing reflections, physical violation, ...).</Fragment>
+  <Picture slot="figure" src={fig6} alt="Qualitative comparison of synthesized mirror reflections across varying scene complexities. (a) Our method vs unconditioned baselines SDXL and FLUX.1-dev. (b) Ablation study on different conditioning strategies: OminiControl, Seg2Any, and SynMirror LoRA." />
+  <Fragment slot="caption">**Qualitative comparisons.** (a) Unconditioned baselines (SDXL and FLUX.1-dev) frequently fail to produce physically accurate reflections, whereas our physics-aware method consistently generates geometrically correct results. (b) Ablation study comparing alternative spatial conditioning strategies, demonstrating how segmentation priors (Seg2Any) and custom fine-tuning (SynMirror LoRA) can introduce visual artifacts or perspective errors compared to our primary method.</Fragment>
 </Figure>
 </Wide>
 
-### CLIP Similarity Results
-
-| Models | CLIP Similarity |
-| :--- | :---: |
-| FLUX.1-dev | **33.9525** |
-| Ours (LoRA training) | 25.2411 |
-| Ours (OminiControl) | <u>33.2339</u> |
-
-Our method that uses the OminiControl weight still achieves good CLIP similarity score like the baseline model, while ensuring the physical correctness of mirror reflections. We evaluated using 115 prompts following the template: "A/An object_name in front of a mirror, both the object and its mirror reflection are visible."
-
 ## Conclusion
 
-In this work, we addressed the challenge of generating physically correct mirror reflections in text-to-image diffusion models by introducing a physics-aware generation pipeline with explicit 3D scene modeling. By automatically constructing a simulated 3D scene from the input prompt and using depth maps as conditioning signals, our approach enforces the physics rule of symmetry between objects and their mirror reflections, which overcomes the limitation of original 2D diffusion models. We demonstrated that both training-based and training-free integration strategies can effectively use these 3D priors to produce more realistic and physically plausible results.
+In this paper, we addressed the challenge of generating physically correct mirror reflections in modern text-to-image diffusion models. To this end, we proposed <SmallCaps>PhysMirror</SmallCaps>, a novel physics-aware pipeline that lifts text prompts into 3D meshes to construct a geometrically correct mirrored scene. By extracting precise spatial conditioning maps from this 3D environment, we successfully guide foundation models like FLUX.1-dev to respect projective physics. Furthermore, we introduced the Mirror Consistency Score (MCS), a fully automated metric that leverages dense feature matching and vanishing point theory to evaluate the geometric correctness of reflections.
 
-In addition, we proposed a novel geometric evaluation metric that quantitatively measures the physical correctness of mirror reflections. Experimental results show that our 3D-conditioned methods consistently outperform baseline models in terms of reflection accuracy while maintaining strong text-image alignment.
+Extensive evaluations demonstrate that <SmallCaps>PhysMirror</SmallCaps> significantly improves reflection realism over unconditioned baselines. Notably, our primary approach using zero-shot depth-conditioned OminiControl framework maintains robust structural coherence even in complex, multi-object environments. Future work will explore extending this explicit 3D conditioning to non-planar reflective surfaces, complex lighting interactions, and temporal geometric consistency for video generation.
 
 ## Acknowledgment
 
-The authors would like to thank the CS412: Computer Vision course instructors and the University of Science, VNUHCM for their support and guidance throughout this research project.
+This research is funded by Vietnam National University - Ho Chi Minh City (VNU-HCM).
 
 ## BibTeX citation
 
 ```bibtex
-@misc{nguyen2025mirror,
-  author = {Nguyen, Duy-Phuc and Mai, Xuan-Bach},
-  title = {Mirror Object Generation},
+@inproceedings{mai2025physmirror,
+  author = {Mai, Xuan-Bach and Nguyen, Duy-Phuc and Le, Quoc-Van and Nguyen, Tam V. and Do, Thanh-Toan and Le, Huu and Nguyen, Duong-Van and Tran, Minh-Triet and Le, Trung-Nghia},
+  title = {PhysMirror: Physics-Aware Mirror Object Generation},
+  booktitle = {IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
   year = {2025},
-  howpublished = {\url{https://github.com/T2I-Mirror-Object/MirrorObjectGen}},
 }
 ```
 
