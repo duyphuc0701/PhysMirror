@@ -10,6 +10,7 @@ authors:
     institution: University of Science, VNUHCM
     notes: ["†"]
   - name: Quoc-Van Le
+    url: https://github.com/qvanle
     institution: University of Science, VNUHCM
   - name: Tam V. Nguyen
     url: https://sites.google.com/site/vantam/
@@ -18,7 +19,6 @@ authors:
     url: https://sites.google.com/view/thanhtoando/home
     institution: Monash University
   - name: Huu Le
-    url: https://huule.github.io/
     institution: VinFast
   - name: Duong-Van Nguyen
     institution: VinFast
@@ -35,11 +35,11 @@ notes:
   - symbol: "‡"
     text: "Corresponding author"
 links:
-  - name: Paper
-    url: https://github.com/T2I-Mirror-Object/PhysMirror
-    icon: ri:file-pdf-2-line
-  - name: Code (Coming Soon)
+  - name: Paper (Coming Soon)
     url: "#"
+    icon: ri:file-pdf-2-line
+  - name: Code
+    url: https://github.com/T2I-Mirror-Object/PhysMirror
     icon: ri:github-line
 
 theme: device
@@ -54,6 +54,49 @@ import Figure from "./components/Figure.astro";
 import Picture from "./components/Picture.astro";
 import Wide from "./components/Wide.astro";
 import Table from "./components/Table.astro";
+
+import carousel003 from "./assets/carousel/combined_003.png";
+import carousel020 from "./assets/carousel/combined_020.png";
+import carousel052 from "./assets/carousel/combined_052.png";
+import carousel057 from "./assets/carousel/combined_057.png";
+import carousel073 from "./assets/carousel/combined_073.png";
+import carousel079 from "./assets/carousel/combined_079.png";
+import carousel081 from "./assets/carousel/combined_081.png";
+import carousel117 from "./assets/carousel/combined_117.png";
+
+import Carousel from "./components/Carousel.astro";
+import CarouselSlide from "./components/CarouselSlide.astro";
+
+<Wide>
+  <h2 class="text-center md:whitespace-nowrap text-3xl md:text-4xl font-medium mt-0 mb-6">Examples of Text-to-Image Generation with PhysMirror</h2>
+</Wide>
+
+<Carousel>
+  <CarouselSlide>
+    <Picture src={carousel003} alt="Text-to-Image Generation Example 1" />
+  </CarouselSlide>
+  <CarouselSlide>
+    <Picture src={carousel020} alt="Text-to-Image Generation Example 2" />
+  </CarouselSlide>
+  <CarouselSlide>
+    <Picture src={carousel052} alt="Text-to-Image Generation Example 3" />
+  </CarouselSlide>
+  <CarouselSlide>
+    <Picture src={carousel057} alt="Text-to-Image Generation Example 4" />
+  </CarouselSlide>
+  <CarouselSlide>
+    <Picture src={carousel073} alt="Text-to-Image Generation Example 5" />
+  </CarouselSlide>
+  <CarouselSlide>
+    <Picture src={carousel079} alt="Text-to-Image Generation Example 6" />
+  </CarouselSlide>
+  <CarouselSlide>
+    <Picture src={carousel081} alt="Text-to-Image Generation Example 7" />
+  </CarouselSlide>
+  <CarouselSlide>
+    <Picture src={carousel117} alt="Text-to-Image Generation Example 8" />
+  </CarouselSlide>
+</Carousel>
 
 <HighlightedSection>
 
@@ -98,7 +141,7 @@ We evaluate the unconditioned baseline models against our proposed physics-aware
 ## BibTeX
 
 ```bibtex
-@inproceedings{mai2025physmirror,
+@inproceedings{physmirror2025,
   author = {Mai, Xuan-Bach and Nguyen, Duy-Phuc and Le, Quoc-Van and Nguyen, Tam V. and Do, Thanh-Toan and Le, Huu and Nguyen, Duong-Van and Tran, Minh-Triet and Le, Trung-Nghia},
   title = {PhysMirror: Physics-Aware Mirror Object Generation},
   booktitle = {IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
