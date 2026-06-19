@@ -117,6 +117,17 @@ We propose <SmallCaps>PhysMirror</SmallCaps>, a modular pipeline that transition
 </Figure>
 </Wide>
 
+## Mirror Consistency Score
+
+To quantitatively evaluate the geometric and physical correctness of mirror reflections without requiring human annotations, we propose the Mirror Consistency Score (MCS). Our metric leverages zero-shot segmentation and dense part-level feature matching to establish corresponding keypoints between a real object and its reflection. Based on the principles of projective geometry, the lines connecting these matched keypoint pairs must converge at a single vanishing point in a 2D image. MCS evaluates the tightness of this intersection cluster to quantify reflection accuracy and physical realism.
+
+<Wide>
+<Figure>
+  <Picture slot="figure" src={"../assets/figures/MirrorConvergenceScore.pdf"} alt="Pipeline of the proposed Mirror Consistency Score (MCS)." />
+  <Fragment slot="caption">Pipeline of the proposed Mirror Consistency Score (MCS). The generated image is first segmented to isolate the primary objects and their reflections. Dense feature matching is then applied to establish corresponding keypoints, which are used to mathematically evaluate projective geometric consistency.</Fragment>
+</Figure>
+</Wide>
+
 ## Visualization Results
 
 Our physics-aware method consistently generates geometrically correct reflections compared to baseline models, maintaining structural coherence and physical correctness.
