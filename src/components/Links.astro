@@ -11,14 +11,23 @@ const { links } = Astro.props;
 
 <div class="not-prose flex flex-row flex-wrap justify-center gap-2">
   {
-    links.map((link) => (
-      <a
-        href={link.url}
-        class="flex flex-row items-center gap-2 rounded-full bg-zinc-800 px-5 py-2 text-lg text-white hover:bg-black hover:no-underline dark:bg-zinc-200 dark:text-zinc-900 dark:hover:bg-zinc-50"
-      >
-        {link.icon && <Icon name={link.icon} />}
-        <span>{link.name}</span>
-      </a>
-    ))
+    links.map((link) =>
+      link.url && link.url !== "#" ? (
+        <a
+          href={link.url}
+          class="flex flex-row items-center gap-2 rounded-full bg-zinc-800 px-5 py-2 text-lg text-white hover:bg-black hover:no-underline dark:bg-zinc-200 dark:text-zinc-900 dark:hover:bg-zinc-50"
+        >
+          {link.icon && <Icon name={link.icon} />}
+          <span>{link.name}</span>
+        </a>
+      ) : (
+        <div
+          class="flex flex-row items-center gap-2 rounded-full bg-zinc-100 border border-zinc-200 dark:border-zinc-800 px-5 py-2 text-lg text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed select-none"
+        >
+          {link.icon && <Icon name={link.icon} />}
+          <span>{link.name}</span>
+        </div>
+      )
+    )
   }
 </div>

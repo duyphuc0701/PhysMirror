@@ -13,6 +13,8 @@ import astroExpressiveCode from "astro-expressive-code";
 
 // https://astro.build/config
 export default defineConfig({
+  site: "https://duyphuc0701.github.io",
+  base: "/PhysMirror",
   vite: {
     plugins: [tailwindcss()],
   },
